@@ -34,6 +34,14 @@ class DragonFire:
     def set_firing(self, is_firing: bool):
         self.is_firing = is_firing
 
+    def get_firing_line(self) -> tuple[Vector2, Vector2]:
+        angle = self.angle - 90
+        second_point = Vector2(
+            1000 * math.cos(math.radians(angle)),
+            1000 * math.sin(math.radians(angle))
+        )
+        return (self.pos, self.pos + second_point)
+
     def draw(self, screen: Surface):
         image = pygame.transform.rotate(self.image, -self.angle)
         if self.is_firing:
@@ -48,41 +56,65 @@ class DragonFire:
             imagerect,
         )
         if self.is_firing:
-            angle = self.angle - 90
-            second_point = (
-                1000 * math.cos(math.radians(angle)),
-                1000 * math.sin(math.radians(angle))
-            )
+            first_point, second_point = self.get_firing_line()
             pygame.draw.line(
                 screen,
                 (255, 0, 0),
-                self.pos,
-                (
-                    self.pos + second_point
-                ),
+                first_point,
+                second_point,
                 5,
             )
 
 class Drone(GameObject):
     def __init__(self) -> None:
-        self.pos = Vector2(random.randint(0, WIDTH - 1), 0)
+        x, y = random.randint(0, WIDTH - 1), 0
         self.speed: Vector2 = Vector2(
             random.uniform(-1, 1),
             random.random(),
         )
         self.image = pygame.image.load("resources/images/Drone.bmp")
-        self.imagerect = self.image.get_rect()
+        self.rect = self.image.get_rect()
+        self.rect[0] += x
+        self.rect[1] += y
+        self.rect[2] += x
+        self.rect[3] += y
+
         self.health = 1.0
+        self._is_being_hit = False
 
     def draw(self, screen: Surface):
-        self.pos += self.speed
+        self.rect[0] += self.speed[0]
+        self.rect[1] += self.speed[1]
+        self.rect[2] += self.speed[0]
+        self.rect[3] += self.speed[1]
+
+        if self._is_being_hit:
+            pygame.transform.threshold(self.image, self.image, (0, 0, 0), (0, 0, 0), (255, 0, 0), 1, 255, 0)
+
         screen.blit(
             self.image,
-            (
-                self.imagerect[0] + self.pos[0],
-                self.imagerect[1] + self.pos[1]
-            )
+            self.rect,
         )
+
+    def calc_hit(self, line: tuple[Vector2, Vector2]):
+        if self.rect.clipline(line[0], line[1]):
+            self.health -= 0.1
+            self._is_being_hit = True
+            return True
+
+        self._is_being_hit = False
+        return False
+
+
+    def is_dead(self) -> bool:
+        return (
+            self.health <= 0
+            or self.rect[0] < 0
+            or self.rect[1] < 0
+            or self.rect[2] > WIDTH
+            or self.rect[3] > HEIGHT
+        )
+            
 
 class GameController:
     def __init__(self):
@@ -111,6 +143,8 @@ class GameController:
         
         if keys[pygame.K_SPACE]:
             self.dragon_fire.set_firing(True)
+            for drone in self.drone_list:
+                drone.calc_hit(self.dragon_fire.get_firing_line())
         else:
             self.dragon_fire.set_firing(False)
 
@@ -119,13 +153,7 @@ class GameController:
 
 
         for drone in self.drone_list:
-            if (
-                drone.pos[1] > HEIGHT
-                or drone.pos[1] < 0
-                or drone.pos[0] < 0
-                or drone.pos[0] > WIDTH
-                or drone.health <= 0
-            ):
+            if drone.is_dead():
                 self.drone_list.remove(drone)
                 continue
             
