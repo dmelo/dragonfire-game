@@ -10,16 +10,21 @@ WIDTH = 800
 HEIGHT = 600
 FPS = 60
 
+
 class GameObject(ABC):
     @abstractmethod
     def draw(self, screen: Surface):
         pass
 
+
 class DragonFire:
     def __init__(self) -> None:
+        # The dragon fire starts at the bottom, center of the screen
         self.pos: Vector2 = Vector2(WIDTH // 2, HEIGHT - 50)
         self.image: Surface = pygame.image.load("resources/images/DragonFire.bmp")
         self.imagerect: Rect = self.image.get_rect()
+
+        # Angle, in degrees, of the dragon fire. 0 Is pointing up. 90 is pointing right.
         self.angle: int = 0
         self.is_firing: bool = False
 
@@ -45,8 +50,11 @@ class DragonFire:
     def draw(self, screen: Surface):
         image = pygame.transform.rotate(self.image, -self.angle)
         if self.is_firing:
+            # Color the DragonFire red when firing
             pygame.transform.threshold(image, image, (0, 0, 0), (0, 0, 0), (255, 0, 0), 1, 255, 0)
+
         imagerect = image.get_rect()
+        # Draw the gun
         screen.blit(
             image,
             (
@@ -55,7 +63,9 @@ class DragonFire:
             ),
             imagerect,
         )
+
         if self.is_firing:
+            # Draw the firing laser
             first_point, second_point = self.get_firing_line()
             pygame.draw.line(
                 screen,
@@ -65,28 +75,32 @@ class DragonFire:
                 5,
             )
 
+
 class Drone(GameObject):
+    id_ctl = 0
+    image: Surface = pygame.image.load("resources/images/Drone.bmp")
+
     def __init__(self) -> None:
-        x, y = random.randint(0, WIDTH - 1), 0
+        self.id = Drone.id_ctl
+        Drone.id_ctl += 1
         self.speed: Vector2 = Vector2(
-            random.uniform(-1, 1),
-            random.random(),
+            random.randint(-1, 1),
+            random.randint(0, 1),
         )
-        self.image = pygame.image.load("resources/images/Drone.bmp")
+        self.image = Drone.image.copy()
         self.rect = self.image.get_rect()
-        self.rect[0] += x
-        self.rect[1] += y
-        self.rect[2] += x
-        self.rect[3] += y
+        self.rect[0] = random.randint(0, WIDTH - 1)
+        self.rect[1] = 0
 
         self.health = 1.0
         self._is_being_hit = False
 
+    def __str__(self) -> str:
+        return f"Drone {self.id} at {self.rect}"
+
     def draw(self, screen: Surface):
         self.rect[0] += self.speed[0]
         self.rect[1] += self.speed[1]
-        self.rect[2] += self.speed[0]
-        self.rect[3] += self.speed[1]
 
         if self._is_being_hit:
             pygame.transform.threshold(self.image, self.image, (0, 0, 0), (0, 0, 0), (255, 0, 0), 1, 255, 0)
@@ -105,16 +119,15 @@ class Drone(GameObject):
         self._is_being_hit = False
         return False
 
-
     def is_dead(self) -> bool:
         return (
             self.health <= 0
             or self.rect[0] < 0
             or self.rect[1] < 0
-            or self.rect[2] > WIDTH
-            or self.rect[3] > HEIGHT
+            or self.rect[0] + self.rect[2] > WIDTH
+            or self.rect[1] + self.rect[3] > HEIGHT
         )
-            
+
 
 class GameController:
     def __init__(self):
@@ -143,14 +156,12 @@ class GameController:
         
         if keys[pygame.K_SPACE]:
             self.dragon_fire.set_firing(True)
-            for drone in self.drone_list:
+            for drone in self.drone_list[:]:
                 drone.calc_hit(self.dragon_fire.get_firing_line())
         else:
             self.dragon_fire.set_firing(False)
 
-
         self.screen.fill((0, 0, 0))
-
 
         for drone in self.drone_list:
             if drone.is_dead():
